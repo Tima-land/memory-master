@@ -4,11 +4,13 @@ on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v4
@@ -17,7 +19,7 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          sudo apt update
+          sudo apt update -y
           sudo apt install -y \
             openjdk-17-jdk \
             libsdl2-dev \
@@ -25,46 +27,80 @@ jobs:
             libsdl2-mixer-dev \
             libsdl2-ttf-dev \
             pkg-config \
-            libgl1-mesa-dev
+            libgl1-mesa-dev \
+            gradle-7.6
+          sudo update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java
 
-      - name: Clean Gradle cache
+      - name: Clean environment
         run: |
-          rm -rf ~/.gradle/caches
+          rm -rf ~/.gradle/
+          rm -rf ~/.cache/pip/
+          rm -rf __pycache__/
+          rm -rf .pytest_cache/
 
       - name: Install Python packages
         run: |
-          python -m pip install --upgrade pip
-          pip install briefcase toga-android pygame
+          python -m pip install --upgrade pip wheel
+          pip install --force-reinstall briefcase toga-android pygame
+          pip list
+
+      - name: Verify environment
+        run: |
+          echo "### Python version ###"
+          python --version
+          echo "\n### Briefcase version ###"
+          briefcase --version
+          echo "\n### Java version ###"
+          java -version
+          echo "\n### Gradle version ###"
+          gradle --version
+          echo "\n### SDL2 config ###"
+          sdl2-config --version
 
       - name: Create project structure
         run: |
           mkdir -p memorymaster
-          [ -f app.py ] && mv app.py memorymaster/
-          [ -f words.txt ] && mv words.txt memorymaster/
-          [ -f correct.wav ] && mv correct.wav memorymaster/ || true
-          [ -f wrong.wav ] && mv wrong.wav memorymaster/ || true
+          touch memorymaster/__init__.py
+          [ -f app.py ] && mv app.py memorymaster/ || echo "app.py not found"
+          [ -f words.txt ] && mv words.txt memorymaster/ || echo "words.txt not found"
           echo "MIT License" > LICENSE
+          tree || echo "tree command not available"
 
       - name: Build Android APK
         run: |
+          set -x  # Включить подробное логирование
           export SDL2_DIR=/usr/lib/x86_64-linux-gnu/cmake/SDL2
+          export GRADLE_OPTS="-Dorg.gradle.daemon=false"
+          
+          # Полная очистка предыдущих сборок
+          rm -rf android/ build/ dist/
+          
           briefcase create android -v
           
-          # Проверяем и обновляем версию Gradle
-          if [ -f "android/gradle/wrapper/gradle-wrapper.properties" ]; then
-            sed -i 's/gradle-8.2-bin.zip/gradle-7.6-bin.zip/g' android/gradle/wrapper/gradle-wrapper.properties
-            echo "Gradle version updated to 7.6"
-          else
-            echo "gradle-wrapper.properties not found, using default version"
-          fi
+          # Принудительно устанавливаем Gradle 7.6
+          cd android
+          ./gradlew wrapper --gradle-version 7.6 --distribution-type bin
+          cd ..
           
           briefcase build android -v
+          ls -la android/**/outputs/
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: app-release
           path: |
             android/**/outputs/apk/**/*.apk
             android/**/outputs/bundle/**/*.aab
+          retention-days: 7
+
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            logs/
+            android/build/reports/
           retention-days: 7
