@@ -1,31 +1,33 @@
 name: Android Build Pipeline
-on: [push, workflow_dispatch]
+on: 
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
+      # Шаг 1: Получение кода из репозитория
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          path: memory-master
 
+      # Шаг 2: Установка Python 3.11
       - name: Setup Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
 
+      # Шаг 3: Установка системных зависимостей
       - name: Install system dependencies
         run: |
-          # Обновляем репозитории с повторными попытками
-          for i in {1..3}; do
-            sudo apt-get update -y && break || sleep 15
-          done
-          
-          # Устанавливаем основные зависимости
-          sudo apt-get install -y --no-install-recommends \
+          sudo apt-get update -y
+          sudo apt-get install -y \
             openjdk-17-jdk \
             libsdl2-dev \
             libsdl2-image-dev \
@@ -35,95 +37,156 @@ jobs:
             libgl1-mesa-dev \
             wget \
             unzip \
-            tree
-          
-          # Устанавливаем Gradle 7.6 вручную
+            tree \
+            zip
+
+          # Установка Gradle 7.6 вручную
           wget https://services.gradle.org/distributions/gradle-7.6-bin.zip -P /tmp
           sudo mkdir -p /opt/gradle
           sudo unzip -o /tmp/gradle-7.6-bin.zip -d /opt/gradle
           
-          # Удаляем старую ссылку, если существует, и создаем новую
+          # Удаление старой ссылки и создание новой
           sudo rm -f /usr/bin/gradle
           sudo ln -s /opt/gradle/gradle-7.6/bin/gradle /usr/bin/gradle
           
-          # Устанавливаем Java 17 как стандартную
+          # Установка Java 17 как стандартной
           sudo update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java
+          
+          # Проверка установленных версий
+          echo "Gradle version: $(gradle --version | head -n 3)"
+          echo "Java version: $(java -version 2>&1 | head -n 1)"
 
+      # Шаг 4: Очистка окружения
       - name: Clean environment
         run: |
           rm -rf ~/.gradle/
           rm -rf ~/.cache/pip/
           rm -rf __pycache__/
           rm -rf .pytest_cache/
+          rm -rf android/
+          rm -rf build/
+          rm -rf dist/
 
+      # Шаг 5: Установка Python пакетов
       - name: Install Python packages
         run: |
           python -m pip install --upgrade pip wheel
           pip install --force-reinstall briefcase toga-android pygame==2.6.0
           pip list
 
+      # Шаг 6: Проверка окружения
       - name: Verify environment
         run: |
           echo "=== Environment Verification ==="
-          echo "Python: $(python --version)"
-          echo "Pip: $(pip --version)"
-          echo "Briefcase: $(briefcase --version)"
-          echo "Java: $(java -version 2>&1 | head -n 1)"
-          echo "Gradle: $(gradle --version | head -n 3)"
-          echo "SDL2: $(sdl2-config --version)"
+          echo "Python version: $(python --version 2>&1)"
+          echo "Pip version: $(pip --version 2>&1)"
+          echo "Briefcase version: $(briefcase --version 2>&1)"
+          echo "Java version: $(java -version 2>&1 | head -n 1)"
+          echo "Gradle version: $(gradle --version 2>&1 | head -n 3)"
+          echo "SDL2 version: $(sdl2-config --version 2>&1)"
+          echo "Working directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
 
+      # Шаг 7: Подготовка структуры проекта
       - name: Prepare project structure
         run: |
+          cd memory-master
+          
+          # Создаем пакет Python
           mkdir -p memorymaster
           touch memorymaster/__init__.py
-          [ -f app.py ] && mv app.py memorymaster/ || echo "app.py not found"
-          [ -f words.txt ] && mv words.txt memorymaster/ || echo "words.txt not found"
+          
+          # Перемещаем файлы приложения
+          if [ -f "app.py" ]; then
+            mv app.py memorymaster/
+          else
+            echo "app.py not found"
+          fi
+          
+          if [ -f "words.txt" ]; then
+            mv words.txt memorymaster/
+          else
+            echo "words.txt not found"
+          fi
+          
+          # Создаем файл лицензии
           echo "MIT License" > LICENSE
+          
+          # Выводим структуру проекта
           echo "=== Project Structure ==="
-          tree || echo "tree command not available"
+          if command -v tree &> /dev/null; then
+            tree
+          else
+            echo "tree command not available, using ls instead"
+            ls -R
+          fi
 
+      # Шаг 8: Сборка Android APK
       - name: Build Android APK
         run: |
-          set -ex
+          cd memory-master
+          
+          set -ex  # Включаем подробное логирование и остановку при ошибке
+          
+          # Экспортируем необходимые переменные окружения
           export SDL2_DIR=/usr/lib/x86_64-linux-gnu/cmake/SDL2
           export GRADLE_OPTS="-Dorg.gradle.daemon=false"
           
-          # Clean previous builds
+          # Очистка предыдущих сборок
           rm -rf android/ build/ dist/
           
-          # Create project
-          briefcase create android -v
+          # Создаем проект Android, используя явный шаблон
+          briefcase create android --template https://github.com/beeware/briefcase-android-template -v
           
-          # Force Gradle 7.6
-          cd android
-          ./gradlew wrapper --gradle-version 7.6 --distribution-type bin
-          cd ..
+          # Принудительно устанавливаем Gradle 7.6 в проекте
+          if [ -d "android" ]; then
+            cd android
+            ./gradlew wrapper --gradle-version 7.6 --distribution-type bin
+            cd ..
+          else
+            echo "Error: android directory not created!"
+            exit 1
+          fi
           
-          # Build with debug info
+          # Собираем APK
           briefcase build android -v
           
-          # Verify outputs
+          # Проверяем выходные файлы
           echo "=== Build Outputs ==="
-          find android -name "*.apk" -o -name "*.aab" | while read f; do
-            echo "Found: $f ($(du -h $f | cut -f1))"
-          done
+          # Создаем папку dist, чтобы собрать артефакты
+          mkdir -p dist/
+          
+          # Ищем APK и AAB файлы и копируем их в dist
+          find android -type f \( -name "*.apk" -o -name "*.aab" \) -exec cp {} dist/ \;
+          
+          # Выводим информацию о найденных файлах
+          if [ -n "$(ls -A dist/)" ]; then
+            echo "APK/AAB files found:"
+            ls -lh dist/
+          else
+            echo "No APK/AAB files found! Searching in android directory:"
+            find android -type f \( -name "*.apk" -o -name "*.aab" \)
+            exit 1
+          fi
 
+      # Шаг 9: Загрузка APK артефакта
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: |
-            android/**/outputs/apk/**/*.apk
-            android/**/outputs/bundle/**/*.aab
+          path: memory-master/dist/*
           retention-days: 7
 
+      # Шаг 10: Архивация логов (в случае ошибки или всегда)
       - name: Archive logs
-        if: always()
+        if: always()  # Выполняется всегда, даже при ошибке
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
           path: |
-            **/logs/
-            **/build/reports/
-            **/*.log
+            memory-master/android/build/reports/**/*
+            memory-master/android/*.log
+            memory-master/*.log
+            memory-master/android/gradle/wrapper/gradle-wrapper.properties
           retention-days: 7
