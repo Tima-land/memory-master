@@ -18,4 +18,8 @@ sources = ["app.py", "words.txt"]
 requires = [
     "toga-android",
     "pygame"
+<<<<<<< HEAD
 ]
+=======
+]
+>>>>>>> 6135a9e2d6cd3e5e9282e7ef22a4af63c02c8e14
