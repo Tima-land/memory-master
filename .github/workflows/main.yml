@@ -1,4 +1,4 @@
-name: Build APK
+name: Build Android APK
 on: [push, workflow_dispatch]
 
 jobs:
@@ -7,7 +7,8 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v4
@@ -35,11 +36,28 @@ jobs:
           python -m pip install --upgrade pip
           pip install briefcase toga-android pygame
 
+      - name: Create project structure
+        run: |
+          mkdir -p memorymaster
+          [ -f app.py ] && mv app.py memorymaster/
+          [ -f words.txt ] && mv words.txt memorymaster/
+          [ -f correct.wav ] && mv correct.wav memorymaster/ || true
+          [ -f wrong.wav ] && mv wrong.wav memorymaster/ || true
+          echo "MIT License" > LICENSE
+
       - name: Build Android APK
         run: |
           export SDL2_DIR=/usr/lib/x86_64-linux-gnu/cmake/SDL2
           briefcase create android -v
-          sed -i 's/gradle-8.2-bin.zip/gradle-7.6-bin.zip/g' memory-master/android/gradle/wrapper/gradle-wrapper.properties
+          
+          # Проверяем и обновляем версию Gradle
+          if [ -f "android/gradle/wrapper/gradle-wrapper.properties" ]; then
+            sed -i 's/gradle-8.2-bin.zip/gradle-7.6-bin.zip/g' android/gradle/wrapper/gradle-wrapper.properties
+            echo "Gradle version updated to 7.6"
+          else
+            echo "gradle-wrapper.properties not found, using default version"
+          fi
+          
           briefcase build android -v
 
       - name: Upload APK
@@ -47,5 +65,6 @@ jobs:
         with:
           name: app-release
           path: |
-            memory-master/android/**/outputs/apk/**/*.apk
-            memory-master/android/**/outputs/bundle/**/*.aab
+            android/**/outputs/apk/**/*.apk
+            android/**/outputs/bundle/**/*.aab
+          retention-days: 7
