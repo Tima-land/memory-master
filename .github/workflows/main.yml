@@ -1,39 +1,20 @@
-name: Build Android APK
+name: Build APK
 on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y openjdk-17-jdk
-          pip install briefcase toga-android pygame
-
-      - name: Create project structure
-        run: |
-          mkdir -p memory-master
-          cp app.py words.txt *.wav memory-master/ || true
-          cp pyproject.toml memory-master/
-
-      - name: Build APK
-        run: |
-          cd memory-master
+      - run: sudo apt update && sudo apt install -y openjdk-17-jdk
+      - run: pip install briefcase toga-android pygame
+      - run: |
           briefcase create android
           briefcase build android
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: memory-master/android/**/outputs/apk/**/*.apk
+          path: android/**/outputs/apk/**/*.apk
