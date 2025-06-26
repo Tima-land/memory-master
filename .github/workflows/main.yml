@@ -1,0 +1,26 @@
+name: Build APK
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y openjdk-17-jdk
+          pip install briefcase toga-android pygame
+      - name: Build APK
+        run: |
+          briefcase create android
+          briefcase build android
+      - name: Upload APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: app-release
+          path: android/gradlew/build/outputs/apk/debug/*.apk
