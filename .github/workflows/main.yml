@@ -7,7 +7,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       # Шаг 1: Получение кода из репозитория
@@ -38,7 +38,8 @@ jobs:
             wget \
             unzip \
             tree \
-            zip
+            zip \
+            file
 
           # Установка Gradle 7.6 вручную
           wget https://services.gradle.org/distributions/gradle-7.6-bin.zip -P /tmp
@@ -53,12 +54,15 @@ jobs:
           sudo update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java
           
           # Проверка установленных версий
+          echo "=== System Dependencies Verification ==="
           echo "Gradle version: $(gradle --version | head -n 3)"
           echo "Java version: $(java -version 2>&1 | head -n 1)"
+          echo "SDL2 version: $(sdl2-config --version)"
 
       # Шаг 4: Очистка окружения
       - name: Clean environment
         run: |
+          echo "=== Cleaning Environment ==="
           rm -rf ~/.gradle/
           rm -rf ~/.cache/pip/
           rm -rf __pycache__/
@@ -66,13 +70,17 @@ jobs:
           rm -rf android/
           rm -rf build/
           rm -rf dist/
+          rm -rf output/
+          echo "Environment cleaned"
 
       # Шаг 5: Установка Python пакетов
       - name: Install Python packages
         run: |
+          echo "=== Installing Python Packages ==="
           python -m pip install --upgrade pip wheel
           pip install --force-reinstall briefcase toga-android pygame==2.6.0
           pip list
+          echo "Python packages installed"
 
       # Шаг 6: Проверка окружения
       - name: Verify environment
@@ -87,10 +95,12 @@ jobs:
           echo "Working directory: $(pwd)"
           echo "Directory contents:"
           ls -la
+          echo "Environment verified"
 
       # Шаг 7: Подготовка структуры проекта
       - name: Prepare project structure
         run: |
+          echo "=== Preparing Project Structure ==="
           cd memory-master
           
           # Создаем пакет Python
@@ -98,33 +108,78 @@ jobs:
           touch memorymaster/__init__.py
           
           # Перемещаем файлы приложения
+          echo "Moving app files..."
           if [ -f "app.py" ]; then
             mv app.py memorymaster/
+            echo "app.py moved to memorymaster/"
           else
-            echo "app.py not found"
+            echo "ERROR: app.py not found!"
+            exit 1
           fi
           
           if [ -f "words.txt" ]; then
             mv words.txt memorymaster/
+            echo "words.txt moved to memorymaster/"
           else
-            echo "words.txt not found"
+            echo "ERROR: words.txt not found!"
+            exit 1
+          fi
+          
+          # Перемещаем звуковые файлы
+          echo "Moving sound files..."
+          if [ -f "correct.wav" ]; then
+            mv correct.wav memorymaster/
+            echo "correct.wav moved to memorymaster/"
+          else
+            echo "WARNING: correct.wav not found"
+          fi
+          
+          if [ -f "wrong.wav" ]; then
+            mv wrong.wav memorymaster/
+            echo "wrong.wav moved to memorymaster/"
+          else
+            echo "WARNING: wrong.wav not found"
           fi
           
           # Создаем файл лицензии
+          echo "Creating LICENSE file..."
           echo "MIT License" > LICENSE
           
           # Выводим структуру проекта
-          echo "=== Project Structure ==="
+          echo "=== Final Project Structure ==="
           if command -v tree &> /dev/null; then
             tree
           else
             echo "tree command not available, using ls instead"
             ls -R
           fi
+          echo "Project structure prepared"
 
-      # Шаг 8: Сборка Android APK
+      # Шаг 8: Обновление pyproject.toml для включения звуковых файлов
+      - name: Update pyproject.toml for sound files
+        run: |
+          echo "=== Updating pyproject.toml ==="
+          cd memory-master
+          
+          # Проверяем существование файла
+          if [ ! -f "pyproject.toml" ]; then
+            echo "ERROR: pyproject.toml not found!"
+            exit 1
+          fi
+          
+          # Обновляем файл для включения звуковых файлов
+          echo "Updating resources in pyproject.toml..."
+          sed -i '/\[tool\.briefcase\.app\.memorymaster\]/a resources = [\n    "memorymaster/correct.wav",\n    "memorymaster/wrong.wav",\n]' pyproject.toml
+          
+          # Выводим обновленный файл для проверки
+          echo "Updated pyproject.toml content:"
+          cat pyproject.toml
+          echo "pyproject.toml updated"
+
+      # Шаг 9: Сборка Android APK
       - name: Build Android APK
         run: |
+          echo "=== Building Android APK ==="
           cd memory-master
           
           set -ex  # Включаем подробное логирование и остановку при ошибке
@@ -134,22 +189,29 @@ jobs:
           export GRADLE_OPTS="-Dorg.gradle.daemon=false"
           
           # Очистка предыдущих сборок
-          rm -rf android/ build/ dist/
+          echo "Cleaning previous builds..."
+          rm -rf android/ build/ dist/ output/
           
-          # Создаем проект Android, используя явный шаблон
-          briefcase create android --template https://github.com/beeware/briefcase-android-template -v
+          # Создаем проект Android
+          echo "Creating Android project..."
+          briefcase create android -v
           
-          # Принудительно устанавливаем Gradle 7.6 в проекте
-          if [ -d "android" ]; then
-            cd android
-            ./gradlew wrapper --gradle-version 7.6 --distribution-type bin
-            cd ..
-          else
-            echo "Error: android directory not created!"
+          # Проверяем создание папки android
+          if [ ! -d "android" ]; then
+            echo "ERROR: android directory not created!"
+            echo "Contents of current directory:"
+            ls -la
             exit 1
           fi
           
+          # Принудительно устанавливаем Gradle 7.6 в проекте
+          echo "Setting Gradle version to 7.6..."
+          cd android
+          ./gradlew wrapper --gradle-version 7.6 --distribution-type bin
+          cd ..
+          
           # Собираем APK
+          echo "Building APK..."
           briefcase build android -v
           
           # Проверяем выходные файлы
@@ -158,19 +220,23 @@ jobs:
           mkdir -p dist/
           
           # Ищем APK и AAB файлы и копируем их в dist
-          find android -type f \( -name "*.apk" -o -name "*.aab" \) -exec cp {} dist/ \;
+          find android -type f \( -name "*.apk" -o -name "*.aab" \) -exec cp -v {} dist/ \;
           
           # Выводим информацию о найденных файлах
           if [ -n "$(ls -A dist/)" ]; then
             echo "APK/AAB files found:"
             ls -lh dist/
+            echo "File types:"
+            file dist/*
           else
-            echo "No APK/AAB files found! Searching in android directory:"
+            echo "ERROR: No APK/AAB files found!"
+            echo "Searching in android directory:"
             find android -type f \( -name "*.apk" -o -name "*.aab" \)
             exit 1
           fi
+          echo "APK build completed"
 
-      # Шаг 9: Загрузка APK артефакта
+      # Шаг 10: Загрузка APK артефакта
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -178,7 +244,7 @@ jobs:
           path: memory-master/dist/*
           retention-days: 7
 
-      # Шаг 10: Архивация логов (в случае ошибки или всегда)
+      # Шаг 11: Архивация логов (в случае ошибки или всегда)
       - name: Archive logs
         if: always()  # Выполняется всегда, даже при ошибке
         uses: actions/upload-artifact@v4
@@ -189,4 +255,4 @@ jobs:
             memory-master/android/*.log
             memory-master/*.log
             memory-master/android/gradle/wrapper/gradle-wrapper.properties
-          retention-days: 7
+          retention-days: 14
