@@ -1,11 +1,19 @@
-name: Build APK
-on: [push, workflow_dispatch]  # Запуск при push и вручную
+name: Build Android APK
+on: 
+  push:
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v4
@@ -16,19 +24,38 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y openjdk-17-jdk
+          sudo apt install -y git wget unzip
 
       - name: Install Python packages
         run: |
+          python -m pip install --upgrade pip
           pip install briefcase toga-android pygame
+
+      - name: Verify project structure
+        run: |
+          ls -la
+          cat pyproject.toml || echo "No pyproject.toml found"
+          briefcase --version
+
+      - name: Initialize Briefcase project
+        if: contains(steps.verify_project_structure.outputs.pyproject_exists, 'false')
+        run: |
+          briefcase new android -t pygame
+          cp app.py ./memory-master
+          cp words.txt ./memory-master
+          cp *.wav ./memory-master || true
 
       - name: Build Android APK
         run: |
-         python -m pip install briefcase
-         briefcase create android
-         briefcase build android
+          cd memory-master || true
+          briefcase create android
+          briefcase build android --no-download
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: android/gradlew/build/outputs/apk/debug/*.apk
+          name: memory-master-apk
+          path: |
+            memory-master/android/**/outputs/apk/**/*.apk
+            memory-master/android/**/outputs/bundle/**/*.aab
+          retention-days: 7
