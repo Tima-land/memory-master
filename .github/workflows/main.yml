@@ -1,10 +1,10 @@
-name: Build Android APK
+name: Android Build Pipeline
 on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout code
@@ -12,7 +12,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python 3.11
+      - name: Setup Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
@@ -28,7 +28,8 @@ jobs:
             libsdl2-ttf-dev \
             pkg-config \
             libgl1-mesa-dev \
-            gradle-7.6
+            gradle-7.6 \
+            tree
           sudo update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java
 
       - name: Clean environment
@@ -46,47 +47,50 @@ jobs:
 
       - name: Verify environment
         run: |
-          echo "### Python version ###"
-          python --version
-          echo "\n### Briefcase version ###"
-          briefcase --version
-          echo "\n### Java version ###"
-          java -version
-          echo "\n### Gradle version ###"
-          gradle --version
-          echo "\n### SDL2 config ###"
-          sdl2-config --version
+          echo "=== Environment Verification ==="
+          echo "Python: $(python --version)"
+          echo "Pip: $(pip --version)"
+          echo "Briefcase: $(briefcase --version)"
+          echo "Java: $(java -version 2>&1 | head -n 1)"
+          echo "Gradle: $(gradle --version | head -n 3)"
+          echo "SDL2: $(sdl2-config --version)"
 
-      - name: Create project structure
+      - name: Prepare project structure
         run: |
           mkdir -p memorymaster
-          touch memorymaster/__init__.py
           [ -f app.py ] && mv app.py memorymaster/ || echo "app.py not found"
           [ -f words.txt ] && mv words.txt memorymaster/ || echo "words.txt not found"
           echo "MIT License" > LICENSE
-          tree || echo "tree command not available"
+          echo "=== Project Structure ==="
+          tree
 
       - name: Build Android APK
         run: |
-          set -x  # Включить подробное логирование
+          set -ex
           export SDL2_DIR=/usr/lib/x86_64-linux-gnu/cmake/SDL2
           export GRADLE_OPTS="-Dorg.gradle.daemon=false"
           
-          # Полная очистка предыдущих сборок
+          # Clean previous builds
           rm -rf android/ build/ dist/
           
+          # Create project
           briefcase create android -v
           
-          # Принудительно устанавливаем Gradle 7.6
+          # Force Gradle 7.6
           cd android
           ./gradlew wrapper --gradle-version 7.6 --distribution-type bin
           cd ..
           
+          # Build with debug info
           briefcase build android -v
-          ls -la android/**/outputs/
+          
+          # Verify outputs
+          echo "=== Build Outputs ==="
+          find android -name "*.apk" -o -name "*.aab" | while read f; do
+            echo "Found: $f ($(du -h $f | cut -f1))"
+          done
 
       - name: Upload APK
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: app-release
@@ -95,12 +99,13 @@ jobs:
             android/**/outputs/bundle/**/*.aab
           retention-days: 7
 
-      - name: Upload build logs
-        if: failure()
+      - name: Archive logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
           path: |
-            logs/
-            android/build/reports/
+            **/logs/
+            **/build/reports/
+            **/*.log
           retention-days: 7
