@@ -1,21 +1,13 @@
 [build-system]
-requires = ["briefcase>=0.3.0"]
-build-backend = "briefcase.backend"
+requires = ["briefcase"]
 
 [tool.briefcase]
 project_name = "Memory Master"
 bundle = "org.memorymaster"
 version = "0.1.0"
-url = "https://github.com/Tima-land/memory-master"
-license = "MIT"  # <- Обязательное поле!
-author = "Your Name"
-author_email = "your@email.com"
 
 [tool.briefcase.app.memorymaster]
 formal_name = "Memory Master"
 description = "Тренажер для запоминания слов"
 sources = ["app.py", "words.txt"]
-requires = [
-    "toga-android",
-    "pygame"
-]
+requires = ["toga-android", "pygame"]
