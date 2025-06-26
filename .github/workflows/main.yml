@@ -39,7 +39,11 @@ jobs:
           
           # Устанавливаем Gradle 7.6 вручную
           wget https://services.gradle.org/distributions/gradle-7.6-bin.zip -P /tmp
-          sudo unzip -d /opt/gradle /tmp/gradle-7.6-bin.zip
+          sudo mkdir -p /opt/gradle
+          sudo unzip -o /tmp/gradle-7.6-bin.zip -d /opt/gradle
+          
+          # Удаляем старую ссылку, если существует, и создаем новую
+          sudo rm -f /usr/bin/gradle
           sudo ln -s /opt/gradle/gradle-7.6/bin/gradle /usr/bin/gradle
           
           # Устанавливаем Java 17 как стандартную
