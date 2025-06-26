@@ -1,0 +1,13 @@
+[build-system]
+requires = ["briefcase"]
+
+[tool.briefcase]
+project_name = "Memory Master"
+bundle = "org.memorymaster"
+version = "0.1.0"
+
+[tool.briefcase.app.memorymaster]
+formal_name = "Memory Master"
+description = "Тренажер для запоминания слов"
+sources = ["app.py", "words.txt"]
+requires = ["toga-android", "pygame"]
