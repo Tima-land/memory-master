@@ -17,10 +17,20 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Fix repository sources
+        run: |
+          sudo sed -i 's/http:/https:/g' /etc/apt/sources.list
+          sudo sed -i 's/archive.ubuntu.com/mirrors.kernel.org/g' /etc/apt/sources.list
+
       - name: Install system dependencies
         run: |
-          sudo apt update -y
-          sudo apt install -y \
+          # Повторяем попытку обновления пакетов
+          for i in {1..3}; do
+            sudo apt-get update -y && break || sleep 15
+          done
+          
+          # Устанавливаем зависимости с повторными попытками
+          sudo apt-get install -y --no-install-recommends \
             openjdk-17-jdk \
             libsdl2-dev \
             libsdl2-image-dev \
@@ -29,7 +39,20 @@ jobs:
             pkg-config \
             libgl1-mesa-dev \
             gradle-7.6 \
-            tree
+            tree || \
+          (sudo apt-get install -f -y && \
+           sudo apt-get install -y --no-install-recommends \
+            openjdk-17-jdk \
+            libsdl2-dev \
+            libsdl2-image-dev \
+            libsdl2-mixer-dev \
+            libsdl2-ttf-dev \
+            pkg-config \
+            libgl1-mesa-dev \
+            gradle-7.6 \
+            tree)
+
+          # Явная установка Java 17
           sudo update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java
 
       - name: Clean environment
