@@ -7,7 +7,7 @@ project_name = "Memory Master"
 bundle = "org.memorymaster"
 version = "0.1.0"
 url = "https://github.com/Tima-land/memory-master"
-license = "MIT"  # <- Вот это обязательное поле!
+license = "MIT"
 author = "Your Name"
 author_email = "your@email.com"
 
@@ -18,8 +18,4 @@ sources = ["app.py", "words.txt"]
 requires = [
     "toga-android",
     "pygame"
-<<<<<<< HEAD
 ]
-=======
-]
->>>>>>> 6135a9e2d6cd3e5e9282e7ef22a4af63c02c8e14
