@@ -1,84 +1,24 @@
-name: Android Build Pipeline
-on: 
-  push:
-    branches: [main]
-  workflow_dispatch:
+name: Android Build
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
 
     steps:
-      # Шаг 1: Получение кода из репозитория с сохранением истории
-      - name: Checkout repository
-        id: checkout_code
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          path: memory-master
-          fetch-tags: false
-          persist-credentials: true
 
-      # Шаг 2: Проверка наличия обязательных файлов
-      - name: Verify critical files
-        id: file_check
-        run: |
-          echo "=== STARTING FILE VERIFICATION ==="
-          cd memory-master
-          
-          # Проверяем различные возможные расположения основного файла
-          if [ -f "app.py" ]; then
-            echo "app.py found in root directory"
-            MAIN_FILE="app.py"
-          elif [ -f "main.py" ]; then
-            echo "main.py found in root directory"
-            MAIN_FILE="main.py"
-          elif [ -f "src/app.py" ]; then
-            echo "app.py found in src directory"
-            MAIN_FILE="src/app.py"
-          elif [ -f "src/main.py" ]; then
-            echo "main.py found in src directory"
-            MAIN_FILE="src/main.py"
-          else
-            echo "::error::CRITICAL ERROR: No main Python file found!"
-            echo "Checked locations: app.py, main.py, src/app.py, src/main.py"
-            echo "Current directory contents:"
-            ls -la
-            echo "Repository structure:"
-            find . -type f -print
-            exit 1
-          fi
-          
-          # Проверка опциональных файлов
-          echo "=== CHECKING OPTIONAL FILES ==="
-          [ -f "words.txt" ] && echo "words.txt found" || echo "::warning::words.txt not found (optional)"
-          [ -f "correct.wav" ] && echo "correct.wav found" || echo "::warning::correct.wav not found (optional)"
-          [ -f "wrong.wav" ] && echo "wrong.wav found" || echo "::warning::wrong.wav not found (optional)"
-          [ -f "pyproject.toml" ] && echo "pyproject.toml found" || echo "::warning::pyproject.toml not found (strongly recommended)"
-          
-          echo "::set-output name=main_file::$MAIN_FILE"
-          echo "=== FILE VERIFICATION COMPLETE ==="
-
-      # Шаг 3: Установка Python 3.11
-      - name: Setup Python environment
-        id: setup_python
+      - name: Setup Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
-          architecture: "x64"
-          cache: "pip"
-          cache-dependency-path: "memory-master/requirements.txt"
 
-      # Шаг 4: Установка системных зависимостей
       - name: Install system dependencies
-        id: install_dependencies
         run: |
-          echo "=== INSTALLING SYSTEM DEPENDENCIES ==="
-          sudo apt-get update -y
-          
-          # Основные зависимости
-          sudo apt-get install -y --no-install-recommends \
+          sudo apt update -y
+          sudo apt install -y \
             openjdk-17-jdk \
             libsdl2-dev \
             libsdl2-image-dev \
@@ -86,239 +26,75 @@ jobs:
             libsdl2-ttf-dev \
             pkg-config \
             libgl1-mesa-dev \
-            wget \
-            unzip \
-            tree \
-            file \
-            ca-certificates \
-            software-properties-common
-            
-          # Установка Gradle 7.6 вручную
-          echo "Installing Gradle 7.6..."
-          wget -q https://services.gradle.org/distributions/gradle-7.6-bin.zip -P /tmp
-          sudo mkdir -p /opt/gradle
-          sudo unzip -q -o /tmp/gradle-7.6-bin.zip -d /opt/gradle
-          sudo ln -sf /opt/gradle/gradle-7.6/bin/gradle /usr/bin/gradle
-          
-          # Установка Java 17 как стандартной
-          sudo update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java
-          
-          # Проверка установленных версий
-          echo "=== INSTALLED VERSIONS ==="
-          echo "Java: $(java -version 2>&1 | head -n 1)"
-          echo "Gradle: $(gradle --version | head -n 3)"
-          echo "SDL2: $(sdl2-config --version)"
-          echo "Python: $(python --version)"
-          echo "=== DEPENDENCIES INSTALLED ==="
+            gradle-7.6
 
-      # Шаг 5: Очистка окружения
       - name: Clean environment
-        id: clean_env
         run: |
-          echo "=== CLEANING ENVIRONMENT ==="
           rm -rf ~/.gradle/
           rm -rf ~/.cache/pip/
           rm -rf __pycache__/
           rm -rf .pytest_cache/
-          rm -rf android/
-          rm -rf build/
-          rm -rf dist/
-          rm -rf output/
-          echo "Environment cleaned"
 
-      # Шаг 6: Установка Python пакетов
       - name: Install Python packages
-        id: install_python_packages
         run: |
-          echo "=== INSTALLING PYTHON PACKAGES ==="
           python -m pip install --upgrade pip wheel
-          pip install --force-reinstall briefcase toga-android pygame==2.6.0
-          echo "Installed packages:"
-          pip list
-          echo "=== PYTHON PACKAGES INSTALLED ==="
+          pip install briefcase toga-android pygame==2.6.0
 
-      # Шаг 7: Подготовка структуры проекта
       - name: Prepare project structure
-        id: prepare_structure
         run: |
           echo "=== PREPARING PROJECT STRUCTURE ==="
-          cd memory-master
-          
-          # Создаем пакет Python
           mkdir -p memorymaster
           
-          # Определяем основной файл
+          # Move files safely
           if [ -f "app.py" ]; then
-            MAIN_FILE="app.py"
-          elif [ -f "main.py" ]; then
-            MAIN_FILE="main.py"
-          elif [ -f "src/app.py" ]; then
-            MAIN_FILE="src/app.py"
-          elif [ -f "src/main.py" ]; then
-            MAIN_FILE="src/main.py"
+            mv app.py memorymaster/
+            echo "Moved app.py to memorymaster/"
           else
-            echo "::error::Main Python file not found after verification!"
+            echo "app.py not found!"
             exit 1
           fi
           
-          # Перемещаем основной файл
-          mv "$MAIN_FILE" memorymaster/
-          echo "Moved $MAIN_FILE to memorymaster/"
-          
-          # Перемещаем дополнительные файлы
-          [ -f "words.txt" ] && mv words.txt memorymaster/ && echo "Moved words.txt"
-          [ -f "correct.wav" ] && mv correct.wav memorymaster/ && echo "Moved correct.wav"
-          [ -f "wrong.wav" ] && mv wrong.wav memorymaster/ && echo "Moved wrong.wav"
-          
-          # Создаем файл лицензии, если отсутствует
-          if [ ! -f "LICENSE" ]; then
-            echo "MIT License" > LICENSE
-            echo "Created LICENSE file"
-          fi
-          
-          # Создаем __init__.py
-          touch memorymaster/__init__.py
-          
-          # Обновляем pyproject.toml при необходимости
-          if [ -f "pyproject.toml" ]; then
-            echo "pyproject.toml exists, updating resources..."
-            if ! grep -q "resources" pyproject.toml; then
-              echo "Adding resources to pyproject.toml..."
-              echo -e "\n[tool.briefcase.app.memorymaster.resources]" >> pyproject.toml
-              echo 'includes = ["*.wav", "*.txt"]' >> pyproject.toml
-            fi
+          if [ -f "words.txt" ]; then
+            mv words.txt memorymaster/
+            echo "Moved words.txt to memorymaster/"
           else
-            echo "::warning::pyproject.toml not found! Creating minimal version..."
-            cat << EOF > pyproject.toml
-            [build-system]
-            requires = ["briefcase>=0.3.0"]
-            build-backend = "briefcase.backend"
-            
-            [tool.briefcase]
-            project_name = "Memory Master"
-            bundle = "org.memorymaster"
-            version = "0.1.0"
-            url = "https://github.com/Tima-land/memory-master"
-            license.file = "LICENSE"
-            author = "Your Name"
-            author_email = "your@email.com"
-            
-            [tool.briefcase.app.memorymaster]
-            formal_name = "Memory Master"
-            description = "Memory training app"
-            sources = ["memorymaster"]
-            requires = ["toga-android", "pygame==2.6.0"]
-            
-            [tool.briefcase.app.memorymaster.resources]
-            includes = ["*.wav", "*.txt"]
-            EOF
+            echo "words.txt not found!"
+            exit 1
           fi
           
-          # Выводим структуру проекта
-          echo "=== FINAL PROJECT STRUCTURE ==="
-          if command -v tree &> /dev/null; then
-            tree
-          else
-            echo "tree command not available, using find:"
-            find . -type f -print
-          fi
-          echo "=== PROJECT STRUCTURE PREPARED ==="
+          echo "MIT License" > LICENSE
+          echo "=== PROJECT STRUCTURE ==="
+          ls -lR
 
-      # Шаг 8: Сборка Android APK
       - name: Build Android APK
-        id: build_apk
         run: |
-          echo "=== STARTING ANDROID BUILD ==="
-          cd memory-master
-          
-          # Экспорт переменных окружения
-          export SDL2_DIR=/usr/lib/x86_64-linux-gnu/cmake/SDL2
+          echo "=== STARTING BUILD ==="
           export GRADLE_OPTS="-Dorg.gradle.daemon=false"
-          export PATH="/opt/gradle/gradle-7.6/bin:$PATH"
           
-          # Очистка предыдущих сборок
-          echo "Cleaning previous builds..."
-          rm -rf android/ build/ dist/ output/
+          # Clean previous builds
+          rm -rf android/ build/ dist/
           
-          # Создание проекта Android
-          echo "Creating Android project..."
+          # Create project
           briefcase create android -v
           
-          # Проверка создания папки android
-          if [ ! -d "android" ]; then
-            echo "::error::ANDROID PROJECT CREATION FAILED!"
-            echo "Contents of current directory:"
-            ls -la
-            exit 1
-          fi
-          
-          # Установка Gradle 7.6 в проекте
-          echo "Setting Gradle version to 7.6..."
+          # Force Gradle 7.6
           cd android
-          ./gradlew wrapper --gradle-version 7.6 --distribution-type bin
+          ./gradlew wrapper --gradle-version 7.6
           cd ..
           
-          # Сборка APK
-          echo "Building APK..."
+          # Build project
           briefcase build android -v
           
-          # Проверка выходных файлов
-          echo "=== BUILD OUTPUTS ==="
-          mkdir -p dist/
-          
-          # Поиск APK файлов
-          APK_FILES=$(find android -name "*.apk" -print)
-          if [ -z "$APK_FILES" ]; then
-            echo "::error::NO APK FILES FOUND!"
-            echo "Searching in android directory:"
-            find android -type f -print
-            exit 1
-          else
-            echo "Found APK files:"
-            echo "$APK_FILES"
-            cp $APK_FILES dist/
-          fi
-          
-          # Проверка файлов
-          echo "File types:"
-          file dist/*
-          echo "APK sizes:"
-          du -h dist/*
-          echo "=== ANDROID BUILD COMPLETE ==="
+          echo "=== BUILD OUTPUT ==="
+          find android -name "*.apk" -o -name "*.aab" | while read f; do
+            echo "Found: $f"
+          done
 
-      # Шаг 9: Загрузка APK артефакта
-      - name: Upload APK artifact
-        if: success()
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: memory-master/dist/*.apk
-          retention-days: 7
-          if-no-files-found: error
-
-      # Шаг 10: Архивация логов
-      - name: Archive build logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs
           path: |
-            memory-master/android/build/**/*.log
-            memory-master/*.log
-            memory-master/android/gradle/wrapper/gradle-wrapper.properties
+            android/**/outputs/apk/**/*.apk
+            android/**/outputs/bundle/**/*.aab
           retention-days: 7
-          if-no-files-found: warn
-
-      # Шаг 11: Уведомление об успехе
-      - name: Success notification
-        if: success()
-        run: |
-          echo "::notice::Build completed successfully!"
-          echo "APK files are available in the artifacts section"
-
-      # Шаг 12: Уведомление о неудаче
-      - name: Failure notification
-        if: failure()
-        run: |
-          echo "::error::Build failed!"
-          echo "Check the build logs for details"
