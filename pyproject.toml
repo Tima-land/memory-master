@@ -1,73 +1,71 @@
-name: Android Full Build Pipeline
-on: 
-  push:
-    branches: [main]
-  workflow_dispatch:
+name: Android APK Build
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 30
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
 
-      - name: Verify project files
-        run: |
-          [ -f "app.py" ] || [ -f "main.py" ] || [ -f "src/app.py" ] || [ -f "src/main.py" ] || {
-            echo "::error::No main Python file found!"
-            exit 1
-          }
-
-      - name: Setup Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
 
-      - name: Install system tools
+      - name: Install system dependencies
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y \
+          sudo apt update
+          sudo apt install -y \
             openjdk-17-jdk \
             libsdl2-dev \
-            wget unzip
+            libsdl2-image-dev \
+            libsdl2-mixer-dev \
+            libsdl2-ttf-dev \
+            pkg-config \
+            libgl1-mesa-dev \
+            cmake
 
-      - name: Setup Gradle
+      - name: Install Python packages
         run: |
-          wget -q https://services.gradle.org/distributions/gradle-7.6-bin.zip -P /tmp
-          sudo unzip -q /tmp/gradle-7.6-bin.zip -d /opt
-          sudo ln -sf /opt/gradle-7.6/bin/gradle /usr/bin/gradle
+          python -m pip install --upgrade pip
+          pip install --no-cache-dir \
+            briefcase==0.3.0 \
+            toga-android \
+            pygame==2.6.0 \
+            pyproject-toml==1.2.0
 
-      - name: Prepare project
+      - name: Verify pyproject.toml
         run: |
-          mkdir -p src/main/python
-          mv *.py src/main/python/ 2>/dev/null || true
-          [ ! -f "pyproject.toml" ] && cat > pyproject.toml <<EOF
-          [build-system]
-          requires = ["briefcase>=0.3.0"]
-          build-backend = "briefcase.backend"
-          EOF
+          if [ ! -f "pyproject.toml" ]; then
+            cat > pyproject.toml <<EOF
+[build-system]
+requires = ["briefcase>=0.3.0"]
+build-backend = "briefcase.backend"
 
-      - name: Build package
+[tool.briefcase]
+project_name = "MyApp"
+bundle = "com.example.myapp"
+version = "0.1.0"
+EOF
+          fi
+          python -c "import tomli; tomli.load(open('pyproject.toml', 'rb'))" || exit 1
+
+      - name: Set up environment
         run: |
-          export SDL2_DIR=/usr/lib/x86_64-linux-gnu/cmake/SDL2
+          echo "SDL_CFLAGS=$(sdl2-config --cflags)" >> $GITHUB_ENV
+          echo "SDL_LIBS=$(sdl2-config --libs)" >> $GITHUB_ENV
+          echo "SDL2_DIR=/usr/lib/x86_64-linux-gnu/cmake/SDL2" >> $GITHUB_ENV
+
+      - name: Build Android APK
+        run: |
           briefcase create android -v
           briefcase build android -v
 
-      - name: Upload artifacts
+      - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: app-build
-          path: |
-            android/**/outputs/apk/**/*.apk
-            android/**/outputs/bundle/**/*.aab
-
-      - name: Archive logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs
-          path: android/**/*.log
+          name: app-release
+          path: android/**/build/outputs/apk/**/*.apk
