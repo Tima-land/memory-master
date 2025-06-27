@@ -1,23 +1,22 @@
-name: Android Build
+name: Build APK
 on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python 3.11
+      - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
 
       - name: Install system dependencies
         run: |
-          sudo apt update -y
+          sudo apt update
           sudo apt install -y \
             openjdk-17-jdk \
             libsdl2-dev \
@@ -25,76 +24,28 @@ jobs:
             libsdl2-mixer-dev \
             libsdl2-ttf-dev \
             pkg-config \
-            libgl1-mesa-dev \
-            gradle-7.6
-
-      - name: Clean environment
-        run: |
-          rm -rf ~/.gradle/
-          rm -rf ~/.cache/pip/
-          rm -rf __pycache__/
-          rm -rf .pytest_cache/
+            libgl1-mesa-dev
 
       - name: Install Python packages
         run: |
-          python -m pip install --upgrade pip wheel
-          pip install briefcase toga-android pygame==2.6.0
+          python -m pip install --upgrade pip
+          pip install briefcase toga-android pygame
 
-      - name: Prepare project structure
+      - name: Set up environment
         run: |
-          echo "=== PREPARING PROJECT STRUCTURE ==="
-          mkdir -p memorymaster
-          
-          # Move files safely
-          if [ -f "app.py" ]; then
-            mv app.py memorymaster/
-            echo "Moved app.py to memorymaster/"
-          else
-            echo "app.py not found!"
-            exit 1
-          fi
-          
-          if [ -f "words.txt" ]; then
-            mv words.txt memorymaster/
-            echo "Moved words.txt to memorymaster/"
-          else
-            echo "words.txt not found!"
-            exit 1
-          fi
-          
-          echo "MIT License" > LICENSE
-          echo "=== PROJECT STRUCTURE ==="
-          ls -lR
+          echo "SDL_CFLAGS=$(sdl2-config --cflags)" >> $GITHUB_ENV
+          echo "SDL_LIBS=$(sdl2-config --libs)" >> $GITHUB_ENV
 
       - name: Build Android APK
         run: |
-          echo "=== STARTING BUILD ==="
-          export GRADLE_OPTS="-Dorg.gradle.daemon=false"
-          
-          # Clean previous builds
-          rm -rf android/ build/ dist/
-          
-          # Create project
+          export SDL2_DIR=/usr/lib/x86_64-linux-gnu/cmake/SDL2
           briefcase create android -v
-          
-          # Force Gradle 7.6
-          cd android
-          ./gradlew wrapper --gradle-version 7.6
-          cd ..
-          
-          # Build project
           briefcase build android -v
-          
-          echo "=== BUILD OUTPUT ==="
-          find android -name "*.apk" -o -name "*.aab" | while read f; do
-            echo "Found: $f"
-          done
 
-      - name: Upload artifacts
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release
           path: |
             android/**/outputs/apk/**/*.apk
             android/**/outputs/bundle/**/*.aab
-          retention-days: 7
