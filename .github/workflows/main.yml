@@ -138,7 +138,7 @@ jobs:
           echo "=== PYTHON PACKAGES INSTALLED ==="
 
       # Шаг 7: Подготовка структуры проекта
-       - name: Prepare project structure
+      - name: Prepare project structure
         id: prepare_structure
         run: |
           echo "=== PREPARING PROJECT STRUCTURE ==="
@@ -189,28 +189,29 @@ jobs:
             fi
           else
             echo "::warning::pyproject.toml not found! Creating minimal version..."
-            # Создаем pyproject.toml через последовательные echo (исправление ошибки)
-            echo "[build-system]" > pyproject.toml
-            echo "requires = [\"briefcase>=0.3.0\"]" >> pyproject.toml
-            echo "build-backend = \"briefcase.backend\"" >> pyproject.toml
-            echo "" >> pyproject.toml
-            echo "[tool.briefcase]" >> pyproject.toml
-            echo "project_name = \"Memory Master\"" >> pyproject.toml
-            echo "bundle = \"org.memorymaster\"" >> pyproject.toml
-            echo "version = \"0.1.0\"" >> pyproject.toml
-            echo "url = \"https://github.com/Tima-land/memory-master\"" >> pyproject.toml
-            echo "license.file = \"LICENSE\"" >> pyproject.toml
-            echo "author = \"Your Name\"" >> pyproject.toml
-            echo "author_email = \"your@email.com\"" >> pyproject.toml
-            echo "" >> pyproject.toml
-            echo "[tool.briefcase.app.memorymaster]" >> pyproject.toml
-            echo "formal_name = \"Memory Master\"" >> pyproject.toml
-            echo "description = \"Memory training app\"" >> pyproject.toml
-            echo "sources = [\"memorymaster\"]" >> pyproject.toml
-            echo "requires = [\"toga-android\", \"pygame==2.6.0\"]" >> pyproject.toml
-            echo "" >> pyproject.toml
-            echo "[tool.briefcase.app.memorymaster.resources]" >> pyproject.toml
-            echo "includes = [\"*.wav\", \"*.txt\"]" >> pyproject.toml
+            cat << EOF > pyproject.toml
+            [build-system]
+            requires = ["briefcase>=0.3.0"]
+            build-backend = "briefcase.backend"
+            
+            [tool.briefcase]
+            project_name = "Memory Master"
+            bundle = "org.memorymaster"
+            version = "0.1.0"
+            url = "https://github.com/Tima-land/memory-master"
+            license.file = "LICENSE"
+            author = "Your Name"
+            author_email = "your@email.com"
+            
+            [tool.briefcase.app.memorymaster]
+            formal_name = "Memory Master"
+            description = "Memory training app"
+            sources = ["memorymaster"]
+            requires = ["toga-android", "pygame==2.6.0"]
+            
+            [tool.briefcase.app.memorymaster.resources]
+            includes = ["*.wav", "*.txt"]
+            EOF
           fi
           
           # Выводим структуру проекта
@@ -222,6 +223,7 @@ jobs:
             find . -type f -print
           fi
           echo "=== PROJECT STRUCTURE PREPARED ==="
+
       # Шаг 8: Сборка Android APK
       - name: Build Android APK
         id: build_apk
