@@ -25,27 +25,27 @@ jobs:
             libsdl2-ttf-dev \
             pkg-config \
             libgl1-mesa-dev
-
+            
       - name: Install Python packages
         run: |
           python -m pip install --upgrade pip
           pip install briefcase toga-android pygame
-
+          
       - name: Set up environment
         run: |
           echo "SDL_CFLAGS=$(sdl2-config --cflags)" >> $GITHUB_ENV
           echo "SDL_LIBS=$(sdl2-config --libs)" >> $GITHUB_ENV
-
+          
       - name: Build Android APK
         run: |
           export SDL2_DIR=/usr/lib/x86_64-linux-gnu/cmake/SDL2
           briefcase create android -v
           briefcase build android -v
-
+          
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: |
-            android/**/outputs/apk/**/*.apk
-            android/**/outputs/bundle/**/*.aab
+          path: |  # ФИКС: Исправлены glob-паттерны
+            android/**/*.apk
+            android/**/*.aab
