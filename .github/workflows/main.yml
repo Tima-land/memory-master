@@ -46,6 +46,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: |  # ФИКС: Исправлены glob-паттерны
-            android/**/*.apk
-            android/**/*.aab
+          path: android/**/build/outputs/apk/**/*.apk
