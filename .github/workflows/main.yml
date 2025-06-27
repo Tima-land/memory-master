@@ -13,6 +13,20 @@ jobs:
           fetch-depth: 0
           path: memory-master
 
+      - name: Verify critical files
+        run: |
+          cd memory-master
+          echo "=== Verifying required files ==="
+          if [ ! -f "app.py" ]; then
+            echo "::error::app.py is missing! Create this file first."
+            exit 1
+          fi
+          [ -f "words.txt" ] || echo "::warning::words.txt is missing (optional)"
+          [ -f "correct.wav" ] || echo "::warning::correct.wav is missing (optional)"
+          [ -f "wrong.wav" ] || echo "::warning::wrong.wav is missing (optional)"
+          echo "=== Found files ==="
+          ls -la
+
       - name: Setup Python 3.11
         uses: actions/setup-python@v4
         with:
@@ -20,8 +34,8 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          sudo apt update -y
-          sudo apt install -y \
+          sudo apt-get update -y
+          sudo apt-get install -y \
             openjdk-17-jdk \
             libsdl2-dev \
             libsdl2-image-dev \
@@ -29,41 +43,31 @@ jobs:
             libsdl2-ttf-dev \
             pkg-config \
             libgl1-mesa-dev \
-            gradle \
-            tree
-
-      - name: Verify files exist
-        run: |
-          cd memory-master
-          echo "=== Checking required files ==="
-          [ -f app.py ] && echo "app.py found" || { echo "ERROR: app.py missing"; exit 1; }
-          [ -f words.txt ] && echo "words.txt found" || echo "WARNING: words.txt missing"
-          [ -f correct.wav ] && echo "correct.wav found" || echo "WARNING: correct.wav missing"
-          [ -f wrong.wav ] && echo "wrong.wav found" || echo "WARNING: wrong.wav missing"
+            gradle
 
       - name: Prepare project structure
         run: |
           cd memory-master
-          echo "=== Creating project structure ==="
           mkdir -p memorymaster
-          mv app.py memorymaster/ || exit 1
+          mv app.py memorymaster/
           [ -f words.txt ] && mv words.txt memorymaster/
           [ -f correct.wav ] && mv correct.wav memorymaster/
           [ -f wrong.wav ] && mv wrong.wav memorymaster/
           echo "MIT License" > LICENSE
-          echo "=== Final structure ==="
+          echo "=== Project structure ==="
           tree || ls -R
 
       - name: Build Android APK
         run: |
           cd memory-master
-          export GRADLE_OPTS="-Dorg.gradle.daemon=false"
+          export SDL2_DIR=/usr/lib/x86_64-linux-gnu/cmake/SDL2
           briefcase create android
-          briefcase build android -v
+          briefcase build android
           mkdir -p dist
-          find android -name "*.apk" -exec cp {} dist/ \;
+          cp android/*/outputs/apk/*/*.apk dist/
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: app-release
@@ -76,6 +80,6 @@ jobs:
         with:
           name: build-logs
           path: |
-            memory-master/android/build/reports/**/*
-            memory-master/*.log
+            memory-master/android/build/outputs/logs/*.log
+            memory-master/android/gradle/wrapper/gradle-wrapper.properties
           retention-days: 3
